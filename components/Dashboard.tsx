@@ -1,23 +1,42 @@
+
 import React, { useMemo, useState } from 'react';
 import { Trade, TradeStatus, StrategyType } from '../types';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   BarChart, Bar, PieChart, Pie, Cell, Legend 
 } from 'recharts';
-import { TrendingUp, DollarSign, Activity, PieChart as PieIcon, Percent, Target, Edit2, RefreshCw, Layers } from 'lucide-react';
+import { TrendingUp, DollarSign, Activity, PieChart as PieIcon, Percent, Target, Edit2, RefreshCw, Layers, Loader2, BarChart2 } from 'lucide-react';
 
 interface DashboardProps {
   trades: Trade[];
   monthlyGoal: number;
+  accountValue: number;
+  incomeTargetPercent: number;
   tickerPrices: Record<string, number>;
+  manualVix: number;
   onEditGoal: () => void;
   onUpdatePrice: (ticker: string, price: number) => void;
+  onUpdateVix: (vix: number) => void;
+  onRefreshPrices: () => void;
+  isRefreshing: boolean;
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-const ASSET_COLORS = { cash: '#10b981', stock: '#3b82f6' };
+const ASSET_COLORS = { cash: '#10b981', stock: '#3b82f6', leaps: '#8b5cf6' };
 
-export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, tickerPrices, onEditGoal, onUpdatePrice }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ 
+  trades, 
+  monthlyGoal, 
+  accountValue, 
+  incomeTargetPercent, 
+  tickerPrices, 
+  manualVix,
+  onEditGoal, 
+  onUpdatePrice, 
+  onUpdateVix,
+  onRefreshPrices, 
+  isRefreshing 
+}) => {
   
   const stats = useMemo(() => {
     let totalPnL = 0;
@@ -29,6 +48,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
     // Capital Allocation
     let cashSecured = 0;
     let stockValue = 0;
+    let leapsValue = 0;
     
     let currentMonthPnL = 0;
 
@@ -63,12 +83,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
           exposure = lockedCash;
         } else if (t.strategy === StrategyType.STOCK_BUY || t.strategy === StrategyType.CC) {
           // Stock Holdings or Covered Call: Value = Current Price * Shares
-          // (CCs technically also have the short call liability, but for asset allocation we count the stock)
-          // Note: contracts for stock = shares in this app based on seed data, but usually contracts=100 shares.
-          // Seed data uses 'contracts: 100' for stock, and 'contracts: 1' for options.
-          const shares = t.strategy === StrategyType.STOCK_BUY ? t.contracts : t.contracts * 100;
+          // Standardized: contracts always represents lots of 100 shares.
+          const shares = t.contracts * 100;
           const value = currentPrice * shares;
           stockValue += value;
+          exposure = value;
+        } else if (t.strategy === StrategyType.LEAPS) {
+          // LEAPS: Value = Cost Basis (Premium * Contracts * 100)
+          // Ideally we would update this with live option prices, but for now we track capital deployed (cost)
+          const value = (t.premium || 0) * (t.contracts || 0) * 100;
+          leapsValue += value;
           exposure = value;
         }
 
@@ -88,8 +112,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
         }
       }
 
-      // Track premiums collected
-      if (t.premium && t.strategy !== StrategyType.STOCK_BUY) {
+      // Track premiums collected (Income strategies only)
+      // Exclude STOCK_BUY and LEAPS (which are typically debit/asset plays)
+      if (t.premium && t.strategy !== StrategyType.STOCK_BUY && t.strategy !== StrategyType.LEAPS) {
         totalPremium += (t.premium * t.contracts * 100);
       }
 
@@ -112,12 +137,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const allocationData = Object.entries(allocationByTicker)
-      .map(([name, value]) => ({ name, value }));
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value); // Sort descending by value
 
     const assetAllocationData = [
-        { name: 'Cash Secured (Puts)', value: cashSecured },
-        { name: 'Stock Holdings', value: stockValue }
-    ].filter(d => d.value > 0);
+        { name: 'CSP', value: cashSecured },
+        { name: 'STOCK', value: stockValue },
+        { name: 'LEAPS', value: leapsValue }
+    ]
+    .filter(d => d.value > 0)
+    .sort((a, b) => b.value - a.value);
 
     const totalClosed = wins + losses;
     const winRate = totalClosed > 0 ? ((wins / totalClosed) * 100).toFixed(1) : '0';
@@ -131,7 +160,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
       openPositions,
       cashSecured,
       stockValue,
-      totalDeployed: cashSecured + stockValue,
+      leapsValue,
+      totalDeployed: cashSecured + stockValue + leapsValue,
       equityCurve,
       monthlyChartData,
       allocationData,
@@ -143,6 +173,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
 
   // Goal Progress Calculation
   const progressPercent = Math.min(Math.max((stats.currentMonthPnL / Math.max(monthlyGoal, 1)) * 100, 0), 100);
+
+  // VIX Allocation Calculation
+  const getVixAllocation = (vix: number) => {
+      let minCash = 0;
+      let maxCash = 0;
+      let stateText = "";
+      let colorClass = "";
+
+      if (vix <= 12) {
+          minCash = 0.40; maxCash = 0.50;
+          stateText = "Extreme Greed";
+          colorClass = "text-emerald-400";
+      } else if (vix <= 15) {
+          minCash = 0.30; maxCash = 0.40;
+          stateText = "Greed";
+          colorClass = "text-emerald-300";
+      } else if (vix <= 20) {
+          minCash = 0.20; maxCash = 0.25;
+          stateText = "Slight Fear";
+          colorClass = "text-amber-300";
+      } else if (vix <= 25) {
+          minCash = 0.10; maxCash = 0.15;
+          stateText = "Fear";
+          colorClass = "text-orange-400";
+      } else if (vix <= 30) {
+          minCash = 0.05; maxCash = 0.10;
+          stateText = "Very Fearful";
+          colorClass = "text-rose-400";
+      } else {
+          minCash = 0.00; maxCash = 0.05;
+          stateText = "Extreme Fear";
+          colorClass = "text-rose-600 font-bold";
+      }
+
+      return { minCash, maxCash, stateText, colorClass };
+  };
+
+  const vixAlloc = getVixAllocation(manualVix);
+  const minCashAmount = accountValue * vixAlloc.minCash;
+  const maxCashAmount = accountValue * vixAlloc.maxCash;
+  
+  // Calculate visual midpoint percentages for the bar chart
+  const cashMidpoint = (vixAlloc.minCash + vixAlloc.maxCash) / 2;
+  const investedMidpoint = 1 - cashMidpoint;
+
+  // Custom legend formatter to ensure visibility on dark background
+  const renderLegendText = (value: string) => {
+    return <span className="text-slate-300 font-medium ml-1 text-xs">{value}</span>;
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -189,7 +268,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
 
         <div className="bg-surface p-4 rounded-xl border border-slate-700 shadow-sm">
           <div className="flex items-center justify-between">
-            <h3 className="text-slate-400 text-sm font-medium">Total Capital Deployed</h3>
+            <h3 className="text-slate-400 text-sm font-medium">Capital Deployed</h3>
             <span className="p-2 rounded-full bg-purple-500/10 text-purple-500">
               <Layers size={20} />
             </span>
@@ -197,9 +276,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
           <div className="text-2xl font-bold mt-2 text-slate-100">
             ${stats.totalDeployed.toLocaleString()}
           </div>
-          <p className="text-xs text-slate-500 mt-1">
-             Cash: <span className="text-emerald-400">${stats.cashSecured.toLocaleString()}</span> • 
-             Stock: <span className="text-blue-400">${stats.stockValue.toLocaleString()}</span>
+          <p className="text-xs text-slate-500 mt-1 truncate">
+             C: <span className="text-emerald-400">${stats.cashSecured.toLocaleString()}</span> | S: <span className="text-blue-400">${stats.stockValue.toLocaleString()}</span> | L: <span className="text-purple-400">${stats.leapsValue.toLocaleString()}</span>
           </p>
         </div>
       </div>
@@ -219,7 +297,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
                       <Edit2 size={14} />
                     </button>
                  </h3>
-                 <p className="text-sm text-slate-400">Current Month Realized P&L vs Target</p>
+                 <p className="text-sm text-slate-400">
+                    Target: <span className="text-emerald-400">{incomeTargetPercent}%</span> of ${accountValue.toLocaleString()}
+                 </p>
             </div>
             <div className="text-right">
                 <span className="text-2xl font-bold text-slate-100">${stats.currentMonthPnL.toFixed(0)}</span>
@@ -238,6 +318,130 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
          </div>
          
          <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-blue-500/5 to-transparent z-0"></div>
+      </div>
+
+      {/* Allocation & Exposure Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* VIX-Cash Allocation Widget */}
+        <div className="bg-surface p-6 rounded-xl border border-slate-700 shadow-sm">
+            <h3 className="text-lg font-semibold mb-4 text-slate-200 flex items-center gap-2">
+                <BarChart2 size={18} className="text-purple-400" /> VIX-Cash Allocation
+            </h3>
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-slate-400">Current VIX</label>
+                    <input 
+                        type="number" 
+                        value={manualVix}
+                        onChange={(e) => onUpdateVix(parseFloat(e.target.value) || 0)}
+                        className="w-20 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-right text-slate-200 focus:border-purple-500 focus:outline-none font-bold"
+                    />
+                </div>
+                
+                <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50 space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="text-slate-500">Market State</span>
+                        <span className={`font-medium ${vixAlloc.colorClass}`}>{vixAlloc.stateText}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                        <span className="text-slate-500">Target Cash %</span>
+                        <span className="text-slate-200">{(vixAlloc.minCash * 100).toFixed(0)}% – {(vixAlloc.maxCash * 100).toFixed(0)}%</span>
+                    </div>
+                </div>
+
+                <div>
+                    <div className="text-xs text-slate-500 mb-1">Recommended Uninvested Cash</div>
+                    <div className="text-xl font-bold text-slate-100">
+                        ${minCashAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })} - ${maxCashAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </div>
+                    
+                    {/* Visual Allocation Bar */}
+                    <div className="mt-3">
+                        <div className="flex h-3 w-full rounded-full overflow-hidden bg-slate-800 border border-slate-700">
+                            <div 
+                                style={{ width: `${investedMidpoint * 100}%` }} 
+                                className="bg-blue-500 h-full transition-all duration-500"
+                                title="Target Invested Capital"
+                            ></div>
+                            <div 
+                                style={{ width: `${cashMidpoint * 100}%` }} 
+                                className="bg-emerald-500 h-full transition-all duration-500"
+                                title="Target Uninvested Cash"
+                            ></div>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-medium">
+                            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Invested ~{(investedMidpoint * 100).toFixed(0)}%</span>
+                            <span className="flex items-center gap-1">Cash ~{(cashMidpoint * 100).toFixed(0)}% <div className="w-2 h-2 rounded-full bg-emerald-500"></div></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {/* Asset Class Allocation */}
+            <div className="bg-surface p-6 rounded-xl border border-slate-700 shadow-sm">
+            <h3 className="text-lg font-semibold mb-4 text-slate-200">Allocation Type</h3>
+            <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                    <Pie
+                    data={stats.assetAllocationData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={70}
+                    paddingAngle={5}
+                    dataKey="value"
+                    >
+                        {stats.assetAllocationData.map((entry, index) => {
+                            let fill = ASSET_COLORS.cash;
+                            if (entry.name === 'STOCK') fill = ASSET_COLORS.stock;
+                            if (entry.name === 'LEAPS') fill = ASSET_COLORS.leaps;
+                            return <Cell key={`cell-${index}`} fill={fill} />;
+                        })}
+                    </Pie>
+                    <Tooltip 
+                        contentStyle={{ backgroundColor: '#1e293b', borderColor: '#475569' }}
+                        itemStyle={{ color: '#e2e8f0' }}
+                        formatter={(value: number) => `$${value.toLocaleString()}`}
+                    />
+                    <Legend formatter={renderLegendText} wrapperStyle={{ paddingTop: '10px' }} />
+                </PieChart>
+                </ResponsiveContainer>
+            </div>
+        </div>
+
+        {/* Ticker Allocation */}
+        {stats.allocationData.length > 0 && (
+            <div className="bg-surface p-6 rounded-xl border border-slate-700 shadow-sm">
+                <h3 className="text-lg font-semibold mb-4 text-slate-200">Ticker Exposure</h3>
+                <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                        <Pie
+                        data={stats.allocationData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={70}
+                        paddingAngle={5}
+                        dataKey="value"
+                        >
+                        {stats.allocationData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                        </Pie>
+                        <Tooltip 
+                            contentStyle={{ backgroundColor: '#1e293b', borderColor: '#475569' }}
+                            itemStyle={{ color: '#e2e8f0' }}
+                            formatter={(value: number) => `$${value.toLocaleString()}`}
+                        />
+                        <Legend formatter={renderLegendText} wrapperStyle={{ paddingTop: '10px' }} />
+                    </PieChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -293,77 +497,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
                 </div>
           </div>
 
-          {/* Right Column: Allocation & Market Data */}
+          {/* Right Column: Market Data */}
           <div className="space-y-6">
-                {/* Asset Class Allocation */}
-                 <div className="bg-surface p-6 rounded-xl border border-slate-700 shadow-sm">
-                    <h3 className="text-lg font-semibold mb-4 text-slate-200">Allocation Type</h3>
-                    <div className="h-48">
-                        <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie
-                            data={stats.assetAllocationData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={40}
-                            outerRadius={60}
-                            paddingAngle={5}
-                            dataKey="value"
-                            >
-                                {stats.assetAllocationData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.name.includes('Cash') ? ASSET_COLORS.cash : ASSET_COLORS.stock} />
-                                ))}
-                            </Pie>
-                            <Tooltip 
-                                contentStyle={{ backgroundColor: '#1e293b', borderColor: '#475569' }}
-                                itemStyle={{ color: '#e2e8f0' }}
-                                formatter={(value: number) => `$${value.toLocaleString()}`}
-                            />
-                            <Legend />
-                        </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* Ticker Allocation */}
-                {stats.allocationData.length > 0 && (
-                    <div className="bg-surface p-6 rounded-xl border border-slate-700 shadow-sm">
-                        <h3 className="text-lg font-semibold mb-4 text-slate-200">Ticker Exposure</h3>
-                        <div className="h-48">
-                            <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                data={stats.allocationData}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={40}
-                                outerRadius={60}
-                                paddingAngle={5}
-                                dataKey="value"
-                                >
-                                {stats.allocationData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                                </Pie>
-                                <Tooltip 
-                                    contentStyle={{ backgroundColor: '#1e293b', borderColor: '#475569' }}
-                                    itemStyle={{ color: '#e2e8f0' }}
-                                    formatter={(value: number) => `$${value.toLocaleString()}`}
-                                />
-                                <Legend />
-                            </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                )}
-
                 {/* Market Data Widget */}
                 {stats.activeTickers.length > 0 && (
                     <div className="bg-surface p-6 rounded-xl border border-slate-700 shadow-sm">
                          <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-                                <RefreshCw size={18} className="text-blue-400" /> Market Data
+                                <Activity size={18} className="text-blue-400" /> Market Data
                             </h3>
+                            <button 
+                              onClick={onRefreshPrices}
+                              disabled={isRefreshing}
+                              className={`p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-400 transition-all ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              title="Refresh Prices from API"
+                            >
+                              <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+                            </button>
                          </div>
                          <div className="space-y-3">
                              {stats.activeTickers.map(ticker => (
@@ -382,8 +532,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ trades, monthlyGoal, ticke
                                      </div>
                                  </div>
                              ))}
-                             <p className="text-xs text-slate-500 mt-2 italic">
-                                Update prices to refresh capital allocation values.
+                             <p className="text-xs text-slate-500 mt-2 italic flex items-center gap-1">
+                                {isRefreshing ? <><Loader2 size={12} className="animate-spin" /> Updating prices...</> : 'Update prices to refresh capital allocation values.'}
                              </p>
                          </div>
                     </div>

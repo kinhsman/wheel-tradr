@@ -1,3 +1,4 @@
+
 import React, { ReactNode, useState } from 'react';
 import { LayoutDashboard, List, Activity, Settings, PlusCircle, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -22,56 +23,60 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
     <div className="flex h-screen bg-background text-slate-100 overflow-hidden">
       {/* Sidebar */}
       <aside 
-        className={`${isCollapsed ? 'w-20' : 'w-64'} bg-surface border-r border-slate-800 hidden md:flex flex-col transition-all duration-300 ease-in-out relative`}
+        className={`${isCollapsed ? 'w-20' : 'w-64'} bg-surface border-r border-slate-800 hidden md:flex flex-col transition-all duration-300 relative`}
       >
         {/* Toggle Button */}
         <button 
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="absolute -right-3 top-8 bg-slate-800 border border-slate-600 rounded-full p-1.5 text-slate-400 hover:text-white shadow-md z-50 hover:bg-slate-700 transition-colors"
-            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="absolute -right-3 top-9 bg-slate-700 border border-slate-600 text-slate-300 rounded-full p-1 hover:bg-slate-600 hover:text-white transition-colors z-50 shadow-md"
         >
-            {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
 
-        <div className={`p-6 ${isCollapsed ? 'px-2 flex justify-center' : ''} h-20`}>
+        <div className={`h-24 flex items-center overflow-hidden whitespace-nowrap transition-all ${isCollapsed ? 'justify-center px-0' : 'px-6'}`}>
           {isCollapsed ? (
-             <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">WT</h1>
+             <div className="w-10 h-10 min-w-[2.5rem] flex-shrink-0 rounded-xl bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center font-bold text-white tracking-tighter shadow-lg">WT</div>
           ) : (
-             <div className="animate-fade-in">
-                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 whitespace-nowrap overflow-hidden">
-                  WheelTradr
+             <div className="min-w-[200px]">
+                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+                    WheelTradr
                 </h1>
-                <p className="text-xs text-slate-500 mt-1 whitespace-nowrap overflow-hidden">Options Journal</p>
+                <p className="text-xs text-slate-500 mt-1">Options Journal</p>
              </div>
           )}
         </div>
 
-        <nav className="flex-1 px-4 space-y-2">
+        <nav className="flex-1 px-4 space-y-2 overflow-x-hidden">
           {navItems.map(item => (
             <button
               key={item.id}
               onClick={() => onChangeView(item.id)}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+              title={isCollapsed ? item.label : undefined}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                 currentView === item.id
                   ? 'bg-primary/10 text-primary border border-primary/20'
                   : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
-              }`}
-              title={isCollapsed ? item.label : ''}
+              } ${isCollapsed ? 'justify-center px-2' : ''}`}
             >
-              <item.icon size={20} className="shrink-0" />
-              {!isCollapsed && <span className="whitespace-nowrap overflow-hidden animate-fade-in">{item.label}</span>}
+              <item.icon size={20} className="min-w-[20px]" />
+              <span className={`transition-opacity duration-200 ${isCollapsed ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>
+                {item.label}
+              </span>
             </button>
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 space-y-4">
+           {/* New Trade Button */}
            <button 
               onClick={onNewTrade}
-              className={`w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg font-medium flex items-center ${isCollapsed ? 'justify-center' : 'justify-center gap-2'} transition-all shadow-lg shadow-emerald-500/20`}
-              title="New Trade"
+              title={isCollapsed ? "New Trade" : undefined}
+              className={`w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20 whitespace-nowrap overflow-hidden ${isCollapsed ? 'px-0' : ''}`}
            >
-              <PlusCircle size={20} />
-              {!isCollapsed && <span className="whitespace-nowrap overflow-hidden animate-fade-in">New Trade</span>}
+              <PlusCircle size={20} className="min-w-[20px]" />
+              <span className={`transition-opacity duration-200 ${isCollapsed ? 'opacity-0 w-0 hidden' : 'opacity-100'}`}>
+                New Trade
+              </span>
            </button>
         </div>
       </aside>
@@ -79,14 +84,16 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
       {/* Mobile Header (Visible only on small screens) */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-surface border-b border-slate-800 z-40 flex items-center justify-between px-4">
          <h1 className="text-xl font-bold text-blue-400">WheelTradr</h1>
-         <button onClick={onNewTrade} className="p-2 bg-emerald-600 rounded-lg text-white">
-            <PlusCircle size={20} />
-         </button>
+         <div className="flex items-center gap-3">
+             <button onClick={onNewTrade} className="p-2 bg-emerald-600 rounded-lg text-white">
+                <PlusCircle size={20} />
+             </button>
+         </div>
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto p-4 md:p-8 pt-20 md:pt-8 scroll-smooth">
-        <div className="max-w-7xl mx-auto">
+      <main className="flex-1 overflow-auto p-4 md:p-8 pt-20 md:pt-8 scroll-smooth pb-24 md:pb-8">
+        <div className="w-full">
            {children}
         </div>
       </main>

@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { StorageService } from './services/storageService';
-import { Trade, TradeStatus } from './types';
+import { MarketService } from './services/marketService';
+import { Trade, TradeStatus, StrategyType } from './types';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { TradeList } from './components/TradeList';
@@ -11,18 +13,25 @@ import { Settings } from './components/Settings';
 function App() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [monthlyGoal, setMonthlyGoal] = useState(1000);
+  const [accountValue, setAccountValue] = useState(0);
+  const [incomeTargetPercent, setIncomeTargetPercent] = useState(3);
   const [tickerPrices, setTickerPrices] = useState<Record<string, number>>({});
+  const [manualVix, setManualVix] = useState(15);
   const [currentView, setCurrentView] = useState('dashboard');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | undefined>(undefined);
   const [filterCycleId, setFilterCycleId] = useState<string | null>(null);
+  const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
 
   const loadData = useCallback(() => {
     const loadedTrades = StorageService.getTrades();
     const settings = StorageService.getSettings();
     setTrades(loadedTrades);
     setMonthlyGoal(settings.monthlyGoal);
+    setAccountValue(settings.totalAccountValue || 0);
+    setIncomeTargetPercent(settings.incomeTargetPercent || 3);
     setTickerPrices(settings.tickerPrices || {});
+    setManualVix(settings.manualVix || 15);
   }, []);
 
   useEffect(() => {
@@ -34,6 +43,37 @@ function App() {
     setTickerPrices(newPrices);
     const settings = StorageService.getSettings();
     StorageService.saveSettings({ ...settings, tickerPrices: newPrices });
+  };
+
+  const handleUpdateVix = (vix: number) => {
+      setManualVix(vix);
+      const settings = StorageService.getSettings();
+      StorageService.saveSettings({ ...settings, manualVix: vix });
+  };
+
+  const handleRefreshMarketData = async () => {
+    const settings = StorageService.getSettings();
+    const apiKey = settings.finnhubApiKey;
+    
+    setIsRefreshingPrices(true);
+    
+    // Refresh Stock Prices (Requires API Key)
+    let newPrices = { ...tickerPrices };
+    
+    if (apiKey) {
+        const activeTickers = Array.from(new Set(
+          trades.filter(t => t.status === TradeStatus.OPEN).map(t => t.ticker)
+        )) as string[];
+
+        if (activeTickers.length > 0) {
+            const fetchedPrices = await MarketService.fetchQuotes(activeTickers, apiKey);
+            newPrices = { ...newPrices, ...fetchedPrices };
+            setTickerPrices(newPrices);
+        }
+    }
+
+    StorageService.saveSettings({ ...settings, tickerPrices: newPrices });
+    setIsRefreshingPrices(false);
   };
 
   const handleSaveTrade = (trade: Trade) => {
@@ -62,16 +102,19 @@ function App() {
     const trade = trades.find(t => t.id === tradeId);
     if (!trade) return;
 
-    // Calculate P&L: (Entry Credit - Exit Debit) - (Entry Fees + Exit Fees)
-    // Entry Credit = Premium * Contracts * 100
-    // Exit Debit = ClosePrice * Contracts * 100
     const contracts = trade.contracts || 1;
-    const entryCredit = (trade.premium || 0) * 100 * contracts;
-    const exitDebit = closePrice * 100 * contracts;
-    
     const totalFees = (trade.fees || 0) + exitFees;
+    let pnl = 0;
     
-    const pnl = (entryCredit - exitDebit) - totalFees;
+    if (trade.strategy === StrategyType.LEAPS) {
+        const entryDebit = (trade.premium || 0) * 100 * contracts;
+        const exitCredit = closePrice * 100 * contracts;
+        pnl = (exitCredit - entryDebit) - totalFees;
+    } else {
+        const entryCredit = (trade.premium || 0) * 100 * contracts;
+        const exitDebit = closePrice * 100 * contracts;
+        pnl = (entryCredit - exitDebit) - totalFees;
+    }
 
     const updatedTrade: Trade = {
       ...trade,
@@ -79,7 +122,7 @@ function App() {
       closePrice: closePrice,
       closeDate: new Date().toISOString().split('T')[0],
       pnl: pnl,
-      fees: totalFees // Update total fees for the record
+      fees: totalFees
     };
 
     StorageService.updateTrade(updatedTrade);
@@ -96,7 +139,6 @@ function App() {
       setCurrentView('cycles');
   };
 
-  // Prepare cycles list for the form dropdown
   const cyclesList = React.useMemo(() => {
       const uniqueCycles = new Set<string>();
       const list: {id: string, ticker: string, label: string}[] = [];
@@ -126,10 +168,16 @@ function App() {
       {currentView === 'dashboard' && (
         <Dashboard 
           trades={trades} 
-          monthlyGoal={monthlyGoal} 
+          monthlyGoal={monthlyGoal}
+          accountValue={accountValue}
+          incomeTargetPercent={incomeTargetPercent}
           tickerPrices={tickerPrices}
+          manualVix={manualVix}
           onUpdatePrice={handleUpdatePrice}
+          onUpdateVix={handleUpdateVix}
           onEditGoal={() => setCurrentView('settings')}
+          onRefreshPrices={handleRefreshMarketData}
+          isRefreshing={isRefreshingPrices}
         />
       )}
       

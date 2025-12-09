@@ -1,7 +1,9 @@
+
 import { Trade, StrategyType, TradeStatus } from '../types';
 
-const STORAGE_KEY = 'wheeltradr_data_v1';
-const SETTINGS_KEY = 'wheeltradr_settings_v1';
+// Static keys for single-user mode
+const CURRENT_STORAGE_KEY = 'wheeltradr_data_v1';
+const CURRENT_SETTINGS_KEY = 'wheeltradr_settings_v1';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -33,7 +35,7 @@ const SEED_DATA: Trade[] = [
     expirationDate: '', // N/A for stock
     strikePrice: 0,
     premium: 0,
-    contracts: 100, // Shares
+    contracts: 1, // 1 lot = 100 shares
     underlyingPrice: 110,
     fees: 0,
     status: TradeStatus.OPEN,
@@ -82,24 +84,51 @@ const SEED_DATA: Trade[] = [
 
 export interface AppSettings {
   monthlyGoal: number;
+  totalAccountValue: number;
+  incomeTargetPercent: number;
   tickerPrices: Record<string, number>;
+  finnhubApiKey?: string;
+  lastVix?: number;
+  manualVix?: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   monthlyGoal: 1000,
-  tickerPrices: {}
+  totalAccountValue: 33000, // Default seed
+  incomeTargetPercent: 3, // Default 3%
+  tickerPrices: {},
+  finnhubApiKey: '',
+  lastVix: 0,
+  manualVix: 15
 };
 
 export const StorageService = {
   getTrades: (): Trade[] => {
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
+      const data = localStorage.getItem(CURRENT_STORAGE_KEY);
       if (!data) {
         // Initialize with seed data if empty
         StorageService.saveTrades(SEED_DATA);
         return SEED_DATA;
       }
-      return JSON.parse(data);
+      
+      let trades = JSON.parse(data);
+      
+      // MIGRATION: Fix legacy Stock trades
+      let modified = false;
+      trades = trades.map((t: Trade) => {
+          if (t.strategy === StrategyType.STOCK_BUY && t.contracts >= 100) {
+              modified = true;
+              return { ...t, contracts: t.contracts / 100 };
+          }
+          return t;
+      });
+
+      if (modified) {
+          StorageService.saveTrades(trades);
+      }
+      
+      return trades;
     } catch (e) {
       console.error("Error reading from storage", e);
       return [];
@@ -108,7 +137,7 @@ export const StorageService = {
 
   saveTrades: (trades: Trade[]) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(trades));
+      localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(trades));
     } catch (e) {
       console.error("Error saving to storage", e);
     }
@@ -116,9 +145,10 @@ export const StorageService = {
 
   getSettings: (): AppSettings => {
     try {
-      const data = localStorage.getItem(SETTINGS_KEY);
+      const data = localStorage.getItem(CURRENT_SETTINGS_KEY);
       if (!data) return DEFAULT_SETTINGS;
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+      const parsed = JSON.parse(data);
+      return { ...DEFAULT_SETTINGS, ...parsed };
     } catch (e) {
       return DEFAULT_SETTINGS;
     }
@@ -126,7 +156,7 @@ export const StorageService = {
 
   saveSettings: (settings: AppSettings) => {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      localStorage.setItem(CURRENT_SETTINGS_KEY, JSON.stringify(settings));
     } catch (e) {
       console.error("Error saving settings", e);
     }
@@ -155,7 +185,6 @@ export const StorageService = {
     StorageService.saveTrades(filtered);
   },
 
-  // Returns a comprehensive export object
   getFullExport: () => {
     return {
       version: 1,
@@ -168,13 +197,11 @@ export const StorageService = {
       try {
           const parsed = JSON.parse(jsonString);
           
-          // Handle legacy format (array of trades)
           if (Array.isArray(parsed)) {
               StorageService.saveTrades(parsed);
               return true;
           }
           
-          // Handle new format (object with trades and settings)
           if (parsed.trades && Array.isArray(parsed.trades)) {
               StorageService.saveTrades(parsed.trades);
               if (parsed.settings) {

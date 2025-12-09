@@ -1,10 +1,11 @@
+
 export enum StrategyType {
   CSP = "Cash-Secured Put",
   CC = "Covered Call",
   PCS = "Put Credit Spread",
-  BUY_WRITE = "Buy-Write",
   STOCK_BUY = "Stock Purchase (Assignment)",
-  STOCK_SELL = "Stock Sale (Called Away)"
+  STOCK_SELL = "Stock Sale (Called Away)",
+  LEAPS = "LEAPS"
 }
 
 export enum TradeStatus {
