@@ -1,6 +1,7 @@
 import { Trade, StrategyType, TradeStatus } from '../types';
 
 const STORAGE_KEY = 'wheeltradr_data_v1';
+const SETTINGS_KEY = 'wheeltradr_settings_v1';
 
 const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -79,6 +80,16 @@ const SEED_DATA: Trade[] = [
   }
 ];
 
+export interface AppSettings {
+  monthlyGoal: number;
+  tickerPrices: Record<string, number>;
+}
+
+const DEFAULT_SETTINGS: AppSettings = {
+  monthlyGoal: 1000,
+  tickerPrices: {}
+};
+
 export const StorageService = {
   getTrades: (): Trade[] => {
     try {
@@ -100,6 +111,24 @@ export const StorageService = {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(trades));
     } catch (e) {
       console.error("Error saving to storage", e);
+    }
+  },
+
+  getSettings: (): AppSettings => {
+    try {
+      const data = localStorage.getItem(SETTINGS_KEY);
+      if (!data) return DEFAULT_SETTINGS;
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+    } catch (e) {
+      return DEFAULT_SETTINGS;
+    }
+  },
+
+  saveSettings: (settings: AppSettings) => {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (e) {
+      console.error("Error saving settings", e);
     }
   },
 
@@ -126,13 +155,34 @@ export const StorageService = {
     StorageService.saveTrades(filtered);
   },
 
-  importTrades: (jsonString: string): boolean => {
+  // Returns a comprehensive export object
+  getFullExport: () => {
+    return {
+      version: 1,
+      trades: StorageService.getTrades(),
+      settings: StorageService.getSettings()
+    };
+  },
+
+  importData: (jsonString: string): boolean => {
       try {
           const parsed = JSON.parse(jsonString);
+          
+          // Handle legacy format (array of trades)
           if (Array.isArray(parsed)) {
               StorageService.saveTrades(parsed);
               return true;
           }
+          
+          // Handle new format (object with trades and settings)
+          if (parsed.trades && Array.isArray(parsed.trades)) {
+              StorageService.saveTrades(parsed.trades);
+              if (parsed.settings) {
+                StorageService.saveSettings(parsed.settings);
+              }
+              return true;
+          }
+
           return false;
       } catch (e) {
           return false;

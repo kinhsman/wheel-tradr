@@ -1,5 +1,5 @@
-import React, { ReactNode, useState } from 'react';
-import { LayoutDashboard, List, Activity, Settings, PlusCircle, RotateCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { ReactNode } from 'react';
+import { LayoutDashboard, List, Activity, Settings, PlusCircle, RotateCw } from 'lucide-react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -9,8 +9,6 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, onNewTrade }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'trades', label: 'Trade Journal', icon: List },
@@ -21,29 +19,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
   return (
     <div className="flex h-screen bg-background text-slate-100 overflow-hidden">
       {/* Sidebar */}
-      <aside 
-        className={`${isCollapsed ? 'w-20' : 'w-64'} bg-surface border-r border-slate-800 hidden md:flex flex-col transition-all duration-300 ease-in-out relative`}
-      >
-        {/* Toggle Button */}
-        <button 
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="absolute -right-3 top-8 bg-slate-800 border border-slate-600 rounded-full p-1.5 text-slate-400 hover:text-white shadow-md z-50 hover:bg-slate-700 transition-colors"
-            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-        >
-            {isCollapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-        </button>
-
-        <div className={`p-6 ${isCollapsed ? 'px-2 flex justify-center' : ''} h-20`}>
-          {isCollapsed ? (
-             <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">WT</h1>
-          ) : (
-             <div className="animate-fade-in">
-                <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 whitespace-nowrap overflow-hidden">
-                  WheelTradr
-                </h1>
-                <p className="text-xs text-slate-500 mt-1 whitespace-nowrap overflow-hidden">Options Journal</p>
-             </div>
-          )}
+      <aside className="w-64 bg-surface border-r border-slate-800 hidden md:flex flex-col">
+        <div className="p-6">
+          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
+            WheelTradr
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">Options Journal</p>
         </div>
 
         <nav className="flex-1 px-4 space-y-2">
@@ -51,15 +32,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
             <button
               key={item.id}
               onClick={() => onChangeView(item.id)}
-              className={`w-full flex items-center ${isCollapsed ? 'justify-center' : ''} gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
                 currentView === item.id
                   ? 'bg-primary/10 text-primary border border-primary/20'
                   : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
               }`}
-              title={isCollapsed ? item.label : ''}
             >
-              <item.icon size={20} className="shrink-0" />
-              {!isCollapsed && <span className="whitespace-nowrap overflow-hidden animate-fade-in">{item.label}</span>}
+              <item.icon size={20} />
+              {item.label}
             </button>
           ))}
         </nav>
@@ -67,11 +47,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
         <div className="p-4 border-t border-slate-800">
            <button 
               onClick={onNewTrade}
-              className={`w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg font-medium flex items-center ${isCollapsed ? 'justify-center' : 'justify-center gap-2'} transition-all shadow-lg shadow-emerald-500/20`}
-              title="New Trade"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
            >
               <PlusCircle size={20} />
-              {!isCollapsed && <span className="whitespace-nowrap overflow-hidden animate-fade-in">New Trade</span>}
+              New Trade
            </button>
         </div>
       </aside>
