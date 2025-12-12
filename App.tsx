@@ -11,6 +11,7 @@ import { CycleView } from './components/CycleView';
 import { Settings } from './components/Settings';
 import { PerformanceCalendar } from './components/PerformanceCalendar';
 import { PerformanceSummary } from './components/PerformanceSummary';
+import { Documentation } from './components/Documentation';
 
 function App() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -205,6 +206,8 @@ function App() {
         
         {currentView === 'perf-calendar' && <PerformanceCalendar trades={trades} />}
         {currentView === 'perf-summary' && <PerformanceSummary trades={trades} />}
+        
+        {currentView === 'documentation' && <Documentation />}
 
         {currentView === 'settings' && <Settings onImportComplete={loadData} />}
 

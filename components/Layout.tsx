@@ -1,6 +1,6 @@
 
 import React, { ReactNode, useState } from 'react';
-import { LayoutDashboard, List, Settings, PlusCircle, RotateCw, ChevronLeft, ChevronRight, TrendingUp, Calendar, BarChart2 } from 'lucide-react';
+import { LayoutDashboard, List, Settings, PlusCircle, RotateCw, ChevronLeft, ChevronRight, TrendingUp, Calendar, BarChart2, BookOpen } from 'lucide-react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -12,6 +12,7 @@ interface LayoutProps {
 export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeView, onNewTrade }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({ 'performance': true });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<string | null>(null);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -26,12 +27,22 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
         { id: 'perf-summary', label: 'Gain/Loss Summary', icon: BarChart2 }
       ]
     },
+    { id: 'documentation', label: 'Documentation', icon: BookOpen },
     { id: 'settings', label: 'Data & Settings', icon: Settings },
   ];
 
   const toggleSubmenu = (id: string) => {
     if (isCollapsed) setIsCollapsed(false);
     setExpandedMenus(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleMobileNavClick = (itemId: string, hasSubItems: boolean) => {
+    if (hasSubItems) {
+      setMobileMenuOpen(mobileMenuOpen === itemId ? null : itemId);
+    } else {
+      setMobileMenuOpen(null);
+      onChangeView(itemId);
+    }
   };
 
   return (
@@ -160,29 +171,41 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentView, onChangeV
       </main>
 
       {/* Mobile Bottom Nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/5 backdrop-blur-xl border-t border-white/10 flex justify-around p-3 z-40 pb-safe">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/5 backdrop-blur-xl border-t border-white/10 flex justify-around items-center p-2 z-40 pb-safe">
         {navItems.map(item => {
-           if (item.subItems) {
-               return (
-                   <button 
-                    key={item.id} 
-                    onClick={() => onChangeView(item.subItems![0].id)}
-                    className={`flex flex-col items-center gap-1 ${item.subItems.some(s => s.id === currentView) ? 'text-neon-blue' : 'text-slate-500'}`}
-                   >
-                       <item.icon size={20} />
-                       <span className="text-[10px] font-medium text-center leading-none">{item.label.split(' ')[0]}</span>
-                   </button>
-               );
-           }
+           const isActive = item.id === currentView || item.subItems?.some(s => s.id === currentView);
+           const hasSubItems = !!item.subItems;
+
            return (
-            <button
-              key={item.id}
-              onClick={() => onChangeView(item.id)}
-              className={`flex flex-col items-center gap-1 ${currentView === item.id ? 'text-neon-blue' : 'text-slate-500'}`}
-            >
-              <item.icon size={20} />
-              <span className="text-[10px] font-medium">{item.label}</span>
-            </button>
+             <div key={item.id} className="relative">
+                 {/* Popup Menu for Items with Sub-items */}
+                 {hasSubItems && mobileMenuOpen === item.id && (
+                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-obsidian border border-white/10 rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.5)] p-2 min-w-[160px] flex flex-col gap-1 animate-scale-in z-50">
+                         {item.subItems!.map(sub => (
+                             <button
+                               key={sub.id}
+                               onClick={() => {
+                                   onChangeView(sub.id);
+                                   setMobileMenuOpen(null);
+                               }}
+                               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${currentView === sub.id ? 'bg-white/10 text-neon-blue' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
+                             >
+                                 {sub.icon && <sub.icon size={16} />}
+                                 {sub.label}
+                             </button>
+                         ))}
+                         {/* Little Arrow pointing down */}
+                         <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-obsidian border-b border-r border-white/10 rotate-45"></div>
+                     </div>
+                 )}
+
+                 <button
+                   onClick={() => handleMobileNavClick(item.id, hasSubItems)}
+                   className={`flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-300 ${isActive ? 'text-neon-blue bg-white/10 shadow-[0_0_10px_rgba(0,243,255,0.2)]' : 'text-slate-500 hover:text-slate-300'}`}
+                 >
+                   <item.icon size={24} />
+                 </button>
+             </div>
            );
         })}
       </div>
