@@ -9,6 +9,8 @@ import { TradeList } from './components/TradeList';
 import { TradeForm } from './components/TradeForm';
 import { CycleView } from './components/CycleView';
 import { Settings } from './components/Settings';
+import { PerformanceCalendar } from './components/PerformanceCalendar';
+import { PerformanceSummary } from './components/PerformanceSummary';
 
 function App() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -22,7 +24,8 @@ function App() {
   const [editingTrade, setEditingTrade] = useState<Trade | undefined>(undefined);
   const [filterCycleId, setFilterCycleId] = useState<string | null>(null);
   const [isRefreshingPrices, setIsRefreshingPrices] = useState(false);
-
+  const [hasApiKey, setHasApiKey] = useState(false);
+  
   const loadData = useCallback(() => {
     const loadedTrades = StorageService.getTrades();
     const settings = StorageService.getSettings();
@@ -32,6 +35,7 @@ function App() {
     setIncomeTargetPercent(settings.incomeTargetPercent || 3);
     setTickerPrices(settings.tickerPrices || {});
     setManualVix(settings.manualVix || 15);
+    setHasApiKey(!!settings.finnhubApiKey);
   }, []);
 
   useEffect(() => {
@@ -77,13 +81,16 @@ function App() {
   };
 
   const handleSaveTrade = (trade: Trade) => {
-    if (editingTrade) {
+    // Only update if we are editing AND the trade ID matches the one being edited.
+    // This allows the "Assignment" logic to pass a NEW trade (with no ID or different ID) 
+    // which will correctly fall through to 'addTrade'.
+    if (editingTrade && trade.id === editingTrade.id) {
       StorageService.updateTrade(trade);
+      setEditingTrade(undefined);
     } else {
       StorageService.addTrade(trade);
     }
     loadData();
-    setEditingTrade(undefined);
   };
 
   const handleDeleteTrade = (id: string) => {
@@ -160,41 +167,50 @@ function App() {
     : trades;
 
   return (
-    <Layout 
-      currentView={currentView} 
-      onChangeView={(view) => { setCurrentView(view); setFilterCycleId(null); }}
-      onNewTrade={handleNewTrade}
-    >
-      {currentView === 'dashboard' && (
-        <Dashboard 
-          trades={trades} 
-          monthlyGoal={monthlyGoal}
-          accountValue={accountValue}
-          incomeTargetPercent={incomeTargetPercent}
-          tickerPrices={tickerPrices}
-          manualVix={manualVix}
-          onUpdatePrice={handleUpdatePrice}
-          onUpdateVix={handleUpdateVix}
-          onEditGoal={() => setCurrentView('settings')}
-          onRefreshPrices={handleRefreshMarketData}
-          isRefreshing={isRefreshingPrices}
-        />
-      )}
-      
-      {currentView === 'trades' && (
-        <TradeList 
-          trades={trades} 
-          onEdit={handleEditTrade} 
-          onDelete={handleDeleteTrade}
-          onViewCycle={handleViewCycle}
-          onQuickClose={handleQuickClose}
-        />
-      )}
+    <>
+      <Layout 
+        currentView={currentView} 
+        onChangeView={(view) => { setCurrentView(view); setFilterCycleId(null); }}
+        onNewTrade={handleNewTrade}
+      >
+        {currentView === 'dashboard' && (
+          <Dashboard 
+            trades={trades} 
+            monthlyGoal={monthlyGoal}
+            accountValue={accountValue}
+            incomeTargetPercent={incomeTargetPercent}
+            tickerPrices={tickerPrices}
+            manualVix={manualVix}
+            onUpdatePrice={handleUpdatePrice}
+            onUpdateVix={handleUpdateVix}
+            onEditGoal={() => setCurrentView('settings')}
+            onRefreshPrices={handleRefreshMarketData}
+            isRefreshing={isRefreshingPrices}
+            hasApiKey={hasApiKey}
+            onSettingsClick={() => setCurrentView('settings')}
+          />
+        )}
+        
+        {currentView === 'trades' && (
+          <TradeList 
+            trades={trades} 
+            onEdit={handleEditTrade} 
+            onDelete={handleDeleteTrade}
+            onViewCycle={handleViewCycle}
+            onQuickClose={handleQuickClose}
+          />
+        )}
 
-      {currentView === 'cycles' && <CycleView trades={filteredTradesForCycles} />}
-      
-      {currentView === 'settings' && <Settings onImportComplete={loadData} />}
+        {currentView === 'cycles' && <CycleView trades={filteredTradesForCycles} />}
+        
+        {currentView === 'perf-calendar' && <PerformanceCalendar trades={trades} />}
+        {currentView === 'perf-summary' && <PerformanceSummary trades={trades} />}
 
+        {currentView === 'settings' && <Settings onImportComplete={loadData} />}
+
+      </Layout>
+      
+      {/* Moved TradeForm outside of Layout to ensure it sits on top of all z-indexes including the mobile header */}
       <TradeForm 
         isOpen={isFormOpen} 
         onClose={() => setIsFormOpen(false)} 
@@ -202,7 +218,7 @@ function App() {
         onSave={handleSaveTrade}
         existingCycles={cyclesList}
       />
-    </Layout>
+    </>
   );
 }
 

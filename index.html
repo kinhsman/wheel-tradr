@@ -1,43 +1,101 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WheelTradr - Options Journal</title>
     <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=2" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         darkMode: 'class',
         theme: {
           extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
             colors: {
-              background: '#0f172a', // slate-900
-              surface: '#1e293b', // slate-800
-              primary: '#3b82f6', // blue-500
-              success: '#10b981', // emerald-500
-              danger: '#ef4444', // red-500
-              warning: '#f59e0b', // amber-500
+              // Base Theme Colors
+              obsidian: '#050505',
+              charcoal: '#0f172a',
+              
+              // Neon Accents
+              neon: {
+                blue: '#00f3ff',   // Cyan
+                purple: '#bc13fe', // Electric Purple
+                green: '#0aff60',  // Neon Green
+                pink: '#ff0099',   // Hot Pink
+                yellow: '#f9f871'
+              },
+              
+              // Semantic
+              success: '#0aff60', 
+              danger: '#ff0055', 
+              warning: '#f9f871',
+            },
+            backgroundImage: {
+              'obsidian-gradient': 'radial-gradient(circle at 50% 0%, #1a1a2e 0%, #050505 100%)',
+              'glass-gradient': 'linear-gradient(145deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.03) 100%)',
             }
           }
         }
       }
     </script>
     <style>
-      /* Custom scrollbar for webkit */
+      :root {
+        --bg-color: #050505;
+        --surface-color: rgba(255, 255, 255, 0.03);
+      }
+      
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+
+      /* Custom scrollbar */
       ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #0f172a; 
+        background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #334155; 
-        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.1); 
+        border-radius: 3px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #475569; 
+        background: rgba(255, 255, 255, 0.2); 
+      }
+
+      /* Animation Utilities */
+      .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+      .animate-scale-in { animation: scaleIn 0.3s ease-out; }
+      .animate-slide-up { animation: slideUp 0.4s ease-out; }
+      .animate-spin-slow { animation: spin 3s linear infinite; }
+
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      
+      /* Spotlight Effect Utility */
+      .spotlight-card {
+        position: relative;
+        overflow: hidden;
+      }
+      .spotlight-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: radial-gradient(800px circle at var(--mouse-x) var(--mouse-y), rgba(255,255,255,0.06), transparent 40%);
+        opacity: 0;
+        transition: opacity 0.5s;
+        pointer-events: none;
+      }
+      .spotlight-card:hover::before {
+        opacity: 1;
       }
     </style>
   <script type="importmap">
@@ -50,12 +108,13 @@
     "recharts": "https://aistudiocdn.com/recharts@^3.5.1",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.556.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.32.0"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.32.0",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3"
   }
 }
 </script>
 </head>
-  <body class="bg-background text-slate-100 antialiased h-screen overflow-hidden">
+  <body class="bg-obsidian text-slate-200 antialiased h-screen overflow-hidden">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
