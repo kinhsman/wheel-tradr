@@ -52,6 +52,11 @@ export const Documentation: React.FC = () => {
         <p className="text-slate-400 max-w-2xl">
           Master your trading strategy with our comprehensive guides. These resources cover everything from core principles to advanced VIX modeling.
         </p>
+        <div className="pt-2 mt-2 border-t border-white/5">
+            <p className="text-xs text-slate-500 font-medium flex items-center gap-1">
+               Credits: Knowledge Base content provided by <span className="text-neon-blue/80">Options Trading University by Ryan Hildreth</span>
+            </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
