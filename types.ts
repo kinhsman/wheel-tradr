@@ -5,6 +5,7 @@ export enum StrategyType {
   PCS = "Put Credit Spread",
   STOCK_BUY = "Stock Purchase (Assignment)",
   STOCK_SELL = "Stock Sale (Called Away)",
+  LONG_STOCK = "Long-Term Stock",
   LEAPS = "LEAPS"
 }
 

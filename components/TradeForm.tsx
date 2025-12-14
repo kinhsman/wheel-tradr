@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { Trade, StrategyType, TradeStatus } from '../types';
@@ -53,6 +52,17 @@ export const TradeForm: React.FC<TradeFormProps> = ({ initialData, isOpen, onClo
     }
   }, [isOpen, initialData]);
 
+  // Calculations
+  const isLongStock = formData.strategy === StrategyType.LONG_STOCK;
+  const isStockBuy = formData.strategy === StrategyType.STOCK_BUY;
+  const isEquity = isLongStock || isStockBuy;
+
+  // Contracts/Shares multiplier
+  // LONG_STOCK: contracts = shares (multiplier 1)
+  // STOCK_BUY: contracts = lots (multiplier 100)
+  // Options: contracts = contracts (multiplier 100)
+  const multiplier = isLongStock ? 1 : 100;
+
   const totalPremium = (formData.premium || 0) * (formData.contracts || 0) * 100;
   
   const breakEven = formData.strategy === StrategyType.CSP 
@@ -61,11 +71,18 @@ export const TradeForm: React.FC<TradeFormProps> = ({ initialData, isOpen, onClo
       ? (formData.underlyingPrice || 0) - (formData.premium || 0) 
       : 0;
 
-  const collateral = formData.strategy === StrategyType.CSP 
-    ? (formData.strikePrice || 0)
-    : formData.strategy === StrategyType.CC 
-      ? (formData.underlyingPrice || 0) 
-      : 0;
+  // For LONG_STOCK, strikePrice stores the Entry/Buy Price
+  const collateral = isEquity
+    ? (formData.strikePrice || 0) 
+    : formData.strategy === StrategyType.CSP 
+      ? (formData.strikePrice || 0)
+      : formData.strategy === StrategyType.CC 
+        ? (formData.underlyingPrice || 0) 
+        : 0;
+
+  const estimatedCost = isLongStock 
+    ? (formData.strikePrice || 0) * (formData.contracts || 0)
+    : 0;
 
   const ror = (collateral > 0 && formData.premium) 
     ? ((formData.premium / collateral) * 100) 
@@ -109,21 +126,33 @@ export const TradeForm: React.FC<TradeFormProps> = ({ initialData, isOpen, onClo
 
     let finalPnl = processedData.pnl;
     if (processedData.status !== TradeStatus.OPEN) {
-        const entryCredit = (processedData.premium || 0) * 100 * (processedData.contracts || 1);
-        const exitDebit = (processedData.closePrice || 0) * 100 * (processedData.contracts || 1);
-        if ((processedData.strategy as StrategyType) === StrategyType.STOCK_BUY) finalPnl = 0; 
-        else if ((processedData.strategy as StrategyType) === StrategyType.LEAPS) finalPnl = (exitDebit - entryCredit) - (processedData.fees || 0);
-        else finalPnl = (entryCredit - exitDebit) - (processedData.fees || 0);
+        const entryCredit = (processedData.premium || 0) * multiplier * (processedData.contracts || 1);
+        const exitDebit = (processedData.closePrice || 0) * multiplier * (processedData.contracts || 1);
+        
+        if (processedData.strategy === StrategyType.STOCK_BUY) {
+            // Assignment usually has 0 PnL at open, tracked via stock value later
+            finalPnl = 0; 
+        } else if (processedData.strategy === StrategyType.LONG_STOCK) {
+             // For LONG STOCK: (Exit Price - Entry Price) * Shares - Fees
+             // Entry Price is stored in strikePrice field
+             finalPnl = ((processedData.closePrice || 0) - (processedData.strikePrice || 0)) * (processedData.contracts || 1) - (processedData.fees || 0);
+        } else if (processedData.strategy === StrategyType.LEAPS) {
+            finalPnl = (exitDebit - entryCredit) - (processedData.fees || 0);
+        } else {
+            finalPnl = (entryCredit - exitDebit) - (processedData.fees || 0);
+        }
     }
+    
     let finalCycleId = processedData.cycleId;
+    // Auto-generate cycle ID for new CSPs only
     if (!finalCycleId && processedData.strategy === StrategyType.CSP) {
         finalCycleId = `cycle_${processedData.ticker?.toLowerCase()}_${Date.now()}`;
     }
     
-    // 1. Save the original trade (CSP)
+    // 1. Save the trade
     onSave({ ...processedData as Trade, pnl: finalPnl, cycleId: finalCycleId });
 
-    // 2. Automate Assignment: If CSP is marked Assigned (and wasn't already), create the Stock trade
+    // 2. Automate Assignment logic (CSP -> Stock Buy)
     if (processedData.strategy === StrategyType.CSP && 
         processedData.status === TradeStatus.ASSIGNED && 
         initialData?.status !== TradeStatus.ASSIGNED) {
@@ -146,7 +175,6 @@ export const TradeForm: React.FC<TradeFormProps> = ({ initialData, isOpen, onClo
             cycleId: finalCycleId // Link to the same wheel cycle
         };
         
-        // Save the new stock trade
         onSave(newStockTrade as Trade);
     }
 
@@ -193,7 +221,7 @@ export const TradeForm: React.FC<TradeFormProps> = ({ initialData, isOpen, onClo
     setIsAnalyzing(true); setAiError('');
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const prompt = `You are a financial trading assistant. Extract option/stock trade details from the user input (text or image) into a STRICT JSON object. Output Schema: { "ticker": "Symbol", "strategy": "One of: 'Cash-Secured Put', 'Covered Call', 'Stock Purchase (Assignment)', 'Stock Sale (Called Away)', 'LEAPS'", "entryDate": "YYYY-MM-DD", "expirationDate": "YYYY-MM-DD", "strikePrice": Number, "premium": Number, "contracts": Number, "underlyingPrice": Number, "fees": Number }. Rules: Sold Put -> Cash-Secured Put, Sold Call -> Covered Call, Bought Call > 1yr -> LEAPS.`;
+        const prompt = `You are a financial trading assistant. Extract option/stock trade details from the user input (text or image) into a STRICT JSON object. Output Schema: { "ticker": "Symbol", "strategy": "One of: 'Cash-Secured Put', 'Covered Call', 'Stock Purchase (Assignment)', 'Stock Sale (Called Away)', 'Long-Term Stock', 'LEAPS'", "entryDate": "YYYY-MM-DD", "expirationDate": "YYYY-MM-DD", "strikePrice": Number, "premium": Number, "contracts": Number, "underlyingPrice": Number, "fees": Number }. Rules: Sold Put -> Cash-Secured Put, Sold Call -> Covered Call, Bought Call > 1yr -> LEAPS.`;
         let contentsPayload: any;
         if (aiMode === 'image' && aiPreview && aiFile) {
              const base64Data = aiPreview.split(',')[1];
@@ -271,26 +299,47 @@ export const TradeForm: React.FC<TradeFormProps> = ({ initialData, isOpen, onClo
               <label className={labelClass}>Entry Date</label>
               <input type="date" name="entryDate" required value={formData.entryDate} onChange={handleChange} className={inputClass} />
             </div>
-            {formData.strategy !== StrategyType.STOCK_BUY && (
+            {!isEquity && (
                 <div>
                 <label className={labelClass}>Expiration</label>
                 <input type="date" name="expirationDate" required value={formData.expirationDate} onChange={handleChange} className={inputClass} />
                 </div>
             )}
+            {isEquity && (
+               <div>
+                  <label className={labelClass}>Time Horizon (Notes)</label>
+                  <input type="text" disabled value="Indefinite Hold" className={`${inputClass} opacity-50 cursor-not-allowed`} />
+               </div>
+            )}
           </div>
 
           {/* Pricing Row - Compact Grid */}
           <div className="grid grid-cols-3 gap-3 md:gap-4">
+            {/* Strike Price or Buy Price Input */}
             <div>
-              <label className={labelClass}>Strike</label>
-              <div className="relative"><span className="absolute left-2.5 top-2 text-slate-400 text-xs">$</span><input type="number" step="0.5" name="strikePrice" value={formData.strikePrice || ''} onChange={handleChange} className={`${inputClass} pl-5`} /></div>
+              <label className={labelClass}>{isEquity ? "Buy Price" : "Strike"}</label>
+              <div className="relative"><span className="absolute left-2.5 top-2 text-slate-400 text-xs">$</span><input type="number" step="0.01" name="strikePrice" value={formData.strikePrice || ''} onChange={handleChange} className={`${inputClass} pl-5`} /></div>
             </div>
+
+            {/* Premium or Empty for Long Stock */}
+            {!isLongStock ? (
+                <div>
+                <label className={labelClass}>Prem/Share</label>
+                <div className="relative"><span className="absolute left-2.5 top-2 text-slate-400 text-xs">$</span><input type="number" step="0.01" name="premium" value={formData.premium || ''} onChange={handleChange} className={`${inputClass} pl-5`} /></div>
+                </div>
+            ) : (
+                // Placeholder to keep grid alignment
+                <div className="opacity-50">
+                    <label className={labelClass}>Prem/Share</label>
+                    <input disabled type="text" value="N/A" className={`${inputClass} border-transparent bg-transparent pl-0`} />
+                </div>
+            )}
+
+            {/* Contracts or Shares Input */}
             <div>
-              <label className={labelClass}>Prem/Share</label>
-              <div className="relative"><span className="absolute left-2.5 top-2 text-slate-400 text-xs">$</span><input type="number" step="0.01" name="premium" value={formData.premium || ''} onChange={handleChange} className={`${inputClass} pl-5`} /></div>
-            </div>
-            <div>
-              <label className={labelClass}>{formData.strategy === StrategyType.STOCK_BUY ? "Lots (100x)" : "Contracts"}</label>
+              <label className={labelClass}>
+                  {isLongStock ? "Quantity (Shares)" : (formData.strategy === StrategyType.STOCK_BUY ? "Lots (100x)" : "Contracts")}
+              </label>
               <input type="number" name="contracts" step="0.01" value={formData.contracts || ''} onChange={handleChange} className={inputClass} />
             </div>
           </div>
@@ -311,7 +360,7 @@ export const TradeForm: React.FC<TradeFormProps> = ({ initialData, isOpen, onClo
                 {formData.status !== TradeStatus.OPEN && (
                     <>
                     <div className="col-span-1">
-                        <label className={labelClass}>Close Price</label>
+                        <label className={labelClass}>{isEquity ? "Sell Price" : "Close Price"}</label>
                         <div className="relative"><span className="absolute left-2.5 top-2 text-slate-400 text-xs">$</span><input type="number" step="0.01" name="closePrice" value={formData.closePrice || ''} onChange={handleChange} className={`${inputClass} pl-5`} /></div>
                     </div>
                      <div className="col-span-1">
@@ -324,10 +373,17 @@ export const TradeForm: React.FC<TradeFormProps> = ({ initialData, isOpen, onClo
             
             {/* Extended Outcome Stats */}
             <div className="mt-4 md:mt-6 grid grid-cols-3 gap-2 md:gap-8 text-sm pt-4 border-t border-white/10">
-                <div className="flex flex-col">
-                    <span className="text-[10px] uppercase text-slate-500 font-bold mb-1">Total Premium</span>
-                    <span className="text-neon-green font-mono text-base md:text-lg font-bold">${totalPremium.toFixed(2)}</span>
-                </div>
+                {!isLongStock ? (
+                    <div className="flex flex-col">
+                        <span className="text-[10px] uppercase text-slate-500 font-bold mb-1">Total Premium</span>
+                        <span className="text-neon-green font-mono text-base md:text-lg font-bold">${totalPremium.toFixed(2)}</span>
+                    </div>
+                ) : (
+                    <div className="flex flex-col">
+                        <span className="text-[10px] uppercase text-slate-500 font-bold mb-1">Total Cost Basis</span>
+                        <span className="text-neon-blue font-mono text-base md:text-lg font-bold">${estimatedCost.toFixed(2)}</span>
+                    </div>
+                )}
                 
                 {formData.strategy === StrategyType.CSP && (
                     <>
@@ -345,7 +401,7 @@ export const TradeForm: React.FC<TradeFormProps> = ({ initialData, isOpen, onClo
             </div>
           </div>
 
-          {formData.strategy !== StrategyType.LEAPS && (
+          {!isEquity && formData.strategy !== StrategyType.LEAPS && (
              <div className="border-t border-white/10 pt-4 md:pt-6">
                 <label className={labelClass}>Wheel Cycle Link</label>
                 <select name="cycleId" value={formData.cycleId} onChange={handleChange} className={inputClass}>

@@ -12,6 +12,9 @@ import { Settings } from './components/Settings';
 import { PerformanceCalendar } from './components/PerformanceCalendar';
 import { PerformanceSummary } from './components/PerformanceSummary';
 import { Documentation } from './components/Documentation';
+import { PrinciplesDoc } from './components/PrinciplesDoc';
+import { LeapsDoc } from './components/LeapsDoc';
+import { VixDoc } from './components/VixDoc';
 
 function App() {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -207,7 +210,10 @@ function App() {
         {currentView === 'perf-calendar' && <PerformanceCalendar trades={trades} />}
         {currentView === 'perf-summary' && <PerformanceSummary trades={trades} />}
         
-        {currentView === 'documentation' && <Documentation />}
+        {currentView === 'documentation' && <Documentation onNavigate={setCurrentView} />}
+        {currentView === 'principles' && <PrinciplesDoc onBack={() => setCurrentView('documentation')} />}
+        {currentView === 'leaps' && <LeapsDoc onBack={() => setCurrentView('documentation')} />}
+        {currentView === 'vix' && <VixDoc onBack={() => setCurrentView('documentation')} />}
 
         {currentView === 'settings' && <Settings onImportComplete={loadData} />}
 

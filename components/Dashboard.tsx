@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Trade, TradeStatus, StrategyType } from '../types';
 import { 
@@ -22,9 +23,9 @@ interface DashboardProps {
   onSettingsClick: () => void;
 }
 
-// Updated NEON Palette
-const COLORS = ['#00f3ff', '#0aff60', '#ff0099', '#bc13fe', '#f9f871', '#ff9f43'];
-const ASSET_COLORS = { cash: '#0aff60', stock: '#00f3ff', leaps: '#bc13fe' };
+// Updated Softer Palette for Dark Mode (Less Contrast)
+const COLORS = ['#38bdf8', '#4ade80', '#f472b6', '#a78bfa', '#facc15', '#fb923c'];
+const ASSET_COLORS = { cash: '#4ade80', stock: '#38bdf8', leaps: '#a78bfa' };
 
 // Reusable Spotlight Card Component
 const SpotlightCard = ({ children, className = "" }: { children?: React.ReactNode, className?: string }) => {
@@ -96,8 +97,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           cashSecured += lockedCash;
           exposure = lockedCash;
         } else if (t.strategy === StrategyType.STOCK_BUY) {
+          // Standard Lots
           const shares = t.contracts * 100;
           const value = currentPrice * shares;
+          stockValue += value;
+          exposure = value;
+        } else if (t.strategy === StrategyType.LONG_STOCK) {
+          // Direct Shares (Contracts = Shares)
+          const value = currentPrice * t.contracts;
           stockValue += value;
           exposure = value;
         } else if (t.strategy === StrategyType.LEAPS) {
@@ -122,7 +129,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         }
       }
 
-      if (t.premium && t.strategy !== StrategyType.STOCK_BUY && t.strategy !== StrategyType.LEAPS) {
+      // Premium tracking - exclude stock buys/long stock from "Premium Collected" metric unless they have a weird setup
+      if (t.premium && t.strategy !== StrategyType.STOCK_BUY && t.strategy !== StrategyType.LONG_STOCK && t.strategy !== StrategyType.LEAPS) {
         totalPremium += (t.premium * t.contracts * 100);
       }
 
@@ -188,11 +196,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const getVixAllocation = (vix: number) => {
       let minCash = 0; let maxCash = 0; let stateText = ""; let colorClass = "";
-      if (vix <= 12) { minCash = 0.40; maxCash = 0.50; stateText = "Extreme Greed"; colorClass = "text-neon-green"; } 
-      else if (vix <= 15) { minCash = 0.30; maxCash = 0.40; stateText = "Greed"; colorClass = "text-emerald-400"; } 
-      else if (vix <= 20) { minCash = 0.20; maxCash = 0.25; stateText = "Slight Fear"; colorClass = "text-neon-yellow"; } 
+      if (vix <= 12) { minCash = 0.40; maxCash = 0.50; stateText = "Extreme Greed"; colorClass = "text-emerald-400"; } 
+      else if (vix <= 15) { minCash = 0.30; maxCash = 0.40; stateText = "Greed"; colorClass = "text-green-400"; } 
+      else if (vix <= 20) { minCash = 0.20; maxCash = 0.25; stateText = "Slight Fear"; colorClass = "text-yellow-400"; } 
       else if (vix <= 25) { minCash = 0.10; maxCash = 0.15; stateText = "Fear"; colorClass = "text-orange-400"; } 
-      else if (vix <= 30) { minCash = 0.05; maxCash = 0.10; stateText = "Very Fearful"; colorClass = "text-neon-pink"; } 
+      else if (vix <= 30) { minCash = 0.05; maxCash = 0.10; stateText = "Very Fearful"; colorClass = "text-rose-400"; } 
       else { minCash = 0.00; maxCash = 0.05; stateText = "Extreme Fear"; colorClass = "text-red-500 font-bold"; }
       return { minCash, maxCash, stateText, colorClass };
   };
@@ -213,11 +221,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <SpotlightCard className="!bg-white/5 border-white/5">
           <div className="flex items-center justify-between">
             <h3 className="text-slate-400 text-sm font-medium uppercase tracking-wider">Total Net P/L</h3>
-            <span className={`p-2 rounded-xl ${stats.totalPnL >= 0 ? 'bg-emerald-500/10 text-neon-green' : 'bg-rose-500/10 text-danger'}`}>
+            <span className={`p-2 rounded-xl ${stats.totalPnL >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
               <DollarSign size={20} />
             </span>
           </div>
-          <div className={`text-3xl font-light mt-2 ${stats.totalPnL >= 0 ? 'text-neon-green drop-shadow-[0_0_8px_rgba(10,255,96,0.3)]' : 'text-danger drop-shadow-[0_0_8px_rgba(255,0,85,0.3)]'}`}>
+          <div className={`text-3xl font-light mt-2 ${stats.totalPnL >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.3)]'}`}>
             ${stats.totalPnL.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <p className="text-slate-500 mt-2 font-medium text-xs">Realized total return</p>
@@ -227,7 +235,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <SpotlightCard className="!bg-white/5 border-white/5">
           <div className="flex items-center justify-between">
             <h3 className="text-slate-400 text-sm font-medium uppercase tracking-wider">Win Rate</h3>
-            <span className="p-2 rounded-xl bg-blue-500/10 text-neon-blue">
+            <span className="p-2 rounded-xl bg-sky-500/10 text-sky-400">
               <Percent size={20} />
             </span>
           </div>
@@ -241,7 +249,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <SpotlightCard className="!bg-white/5 border-white/5">
           <div className="flex items-center justify-between">
             <h3 className="text-slate-400 text-sm font-medium uppercase tracking-wider">Total Premium collected</h3>
-            <span className="p-2 rounded-xl bg-amber-500/10 text-neon-yellow">
+            <span className="p-2 rounded-xl bg-yellow-500/10 text-yellow-400">
               <Activity size={20} />
             </span>
           </div>
@@ -257,7 +265,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
          <div className="relative z-10 flex flex-col md:flex-row justify-between md:items-center gap-4 mb-4">
             <div>
                  <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                    <Target size={20} className="text-neon-yellow" /> 
+                    <Target size={20} className="text-yellow-400" /> 
                     Monthly Income Goal
                     <button 
                       onClick={onEditGoal}
@@ -267,7 +275,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </button>
                  </h3>
                  <p className="text-sm text-slate-400">
-                    Target: <span className="text-neon-green font-mono">{incomeTargetPercent}%</span> of ${accountValue.toLocaleString()}
+                    Target: <span className="text-emerald-400 font-mono">{incomeTargetPercent}%</span> of ${accountValue.toLocaleString()}
                  </p>
             </div>
             <div className="text-right">
@@ -280,8 +288,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
          
          <div className="w-full bg-black/50 rounded-full h-3 overflow-hidden relative z-10 backdrop-blur-sm border border-white/5">
              <div 
-                className={`h-full transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(10,255,96,0.5)] ${
-                    stats.currentMonthIncome >= monthlyGoal ? 'bg-neon-green' : 'bg-neon-blue'
+                className={`h-full transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(52,211,153,0.5)] ${
+                    stats.currentMonthIncome >= monthlyGoal ? 'bg-emerald-400' : 'bg-sky-400'
                 }`}
                 style={{ width: `${progressPercent}%` }}
              ></div>
@@ -292,7 +300,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <SpotlightCard>
             <h3 className="text-lg font-semibold mb-6 text-slate-200 flex items-center gap-2">
-                <BarChart2 size={18} className="text-neon-purple" /> VIX-Cash Allocation
+                <BarChart2 size={18} className="text-violet-400" /> VIX-Cash Allocation
             </h3>
             <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -301,7 +309,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         type="number" 
                         value={manualVix}
                         onChange={(e) => onUpdateVix(parseFloat(e.target.value) || 0)}
-                        className="w-20 bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-right text-white focus:border-neon-purple focus:ring-1 focus:ring-neon-purple focus:outline-none font-bold"
+                        className="w-20 bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-right text-white focus:border-violet-400 focus:ring-1 focus:ring-violet-400 focus:outline-none font-bold"
                     />
                 </div>
                 
@@ -326,11 +334,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         <div className="flex h-2 w-full rounded-full overflow-hidden bg-white/10">
                             <div 
                                 style={{ width: `${investedMidpoint * 100}%` }} 
-                                className="bg-neon-blue h-full shadow-[0_0_10px_rgba(0,243,255,0.4)]"
+                                className="bg-sky-400 h-full shadow-[0_0_10px_rgba(56,189,248,0.4)]"
                             ></div>
                             <div 
                                 style={{ width: `${cashMidpoint * 100}%` }} 
-                                className="bg-neon-green h-full shadow-[0_0_10px_rgba(10,255,96,0.4)]"
+                                className="bg-emerald-400 h-full shadow-[0_0_10px_rgba(74,222,128,0.4)]"
                             ></div>
                         </div>
                     </div>
@@ -340,12 +348,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         <SpotlightCard>
             <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2 mb-4">
-                <PieIcon size={18} className="text-neon-blue" /> Capital Allocation
+                <PieIcon size={18} className="text-sky-400" /> Capital Allocation
             </h3>
             
             <div className="bg-white/5 px-4 py-3 rounded-xl border border-white/5 mb-6 flex justify-between items-center">
                  <span className="text-sm text-slate-400">Current Total Value</span>
-                 <span className="text-lg font-bold text-neon-green font-mono">${stats.totalDeployed.toLocaleString()}</span>
+                 <span className="text-lg font-bold text-emerald-400 font-mono">${stats.totalDeployed.toLocaleString()}</span>
             </div>
 
             <div className="h-64">
@@ -382,7 +390,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {stats.allocationData.length > 0 && (
             <SpotlightCard>
                 <h3 className="text-lg font-semibold mb-4 text-slate-200 flex items-center gap-2">
-                    <Layers size={18} className="text-neon-green" /> Ticker Exposure
+                    <Layers size={18} className="text-emerald-400" /> Ticker Exposure
                 </h3>
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
@@ -419,15 +427,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="lg:col-span-2 space-y-6">
                 <SpotlightCard>
                 <h3 className="text-lg font-semibold mb-6 text-slate-200 flex items-center gap-2">
-                    <TrendingUp size={18} className="text-neon-green" /> Equity Curve
+                    <TrendingUp size={18} className="text-emerald-400" /> Equity Curve
                 </h3>
                 <div className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={stats.equityCurve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <defs>
                             <linearGradient id="colorEquity" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#0aff60" stopOpacity={0.4}/>
-                                <stop offset="95%" stopColor="#0aff60" stopOpacity={0}/>
+                                <stop offset="5%" stopColor="#4ade80" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#4ade80" stopOpacity={0}/>
                             </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
@@ -452,15 +460,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         />
                         <Tooltip 
                             contentStyle={{ backgroundColor: 'rgba(5,5,5,0.9)', borderColor: 'rgba(255,255,255,0.1)', borderRadius: '12px', backdropFilter: 'blur(8px)', boxShadow: '0 10px 30px -10px rgba(0,0,0,0.1)' }}
-                            itemStyle={{ color: '#0aff60' }}
+                            itemStyle={{ color: '#4ade80' }}
                             formatter={(value: number) => [`$${value.toLocaleString(undefined, {minimumFractionDigits: 2})}`, 'Total P&L']}
                             labelFormatter={(label) => new Date(label).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
                         />
                         <Area 
                             type="monotone" 
                             dataKey="value" 
-                            stroke="#0aff60"
-                            strokeWidth={3} 
+                            stroke="#4ade80"
+                            strokeWidth={2} 
                             fillOpacity={1} 
                             fill="url(#colorEquity)" 
                             animationDuration={1500}
@@ -472,19 +480,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                 <SpotlightCard>
                     <h3 className="text-lg font-semibold mb-6 text-slate-200 flex items-center gap-2">
-                        <BarChart3 size={18} className="text-neon-blue" /> Monthly P&L
+                        <BarChart3 size={18} className="text-sky-400" /> Monthly P&L
                     </h3>
                     <div className="h-72">
                         <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={stats.monthlyChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="colorPnLUp" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#0aff60" stopOpacity={0.8}/>
-                                    <stop offset="95%" stopColor="#0aff60" stopOpacity={0.3}/>
+                                    <stop offset="5%" stopColor="#4ade80" stopOpacity={0.8}/>
+                                    <stop offset="95%" stopColor="#4ade80" stopOpacity={0.3}/>
                                 </linearGradient>
                                 <linearGradient id="colorPnLDown" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#ff0055" stopOpacity={0.8}/>
-                                    <stop offset="95%" stopColor="#ff0055" stopOpacity={0.3}/>
+                                    <stop offset="5%" stopColor="#f87171" stopOpacity={0.8}/>
+                                    <stop offset="95%" stopColor="#f87171" stopOpacity={0.3}/>
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" vertical={false} />
@@ -526,7 +534,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                     return (
                                         <div className="bg-obsidian/90 border border-white/10 p-4 rounded-xl shadow-xl backdrop-blur-md">
                                         <p className="text-slate-400 text-xs mb-1 font-medium">{formattedLabel}</p>
-                                        <p className={`text-xl font-bold ${payload[0].value >= 0 ? 'text-neon-green' : 'text-danger'}`}>
+                                        <p className={`text-xl font-bold ${payload[0].value >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                             {payload[0].value >= 0 ? '+' : ''}${payload[0].value?.toLocaleString()}
                                         </p>
                                         </div>
@@ -553,12 +561,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <SpotlightCard>
                          <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-                                <Activity size={18} className="text-neon-blue" /> Market Data
+                                <Activity size={18} className="text-sky-400" /> Market Data
                             </h3>
                             <button 
                               onClick={onRefreshPrices}
                               disabled={isRefreshing}
-                              className={`p-2 rounded-lg bg-white/5 hover:bg-white/10 text-neon-blue transition-all border border-white/5 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              className={`p-2 rounded-lg bg-white/5 hover:bg-white/10 text-sky-400 transition-all border border-white/5 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
                               title="Refresh Prices from API"
                             >
                               <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
@@ -566,14 +574,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                          </div>
                          
                          {!hasApiKey && (
-                            <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg flex flex-col gap-2 relative overflow-hidden group">
-                                <div className="absolute inset-0 bg-blue-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                                <p className="text-xs text-blue-200 relative z-10">
+                            <div className="mb-4 p-3 bg-sky-500/10 border border-sky-500/20 rounded-lg flex flex-col gap-2 relative overflow-hidden group">
+                                <div className="absolute inset-0 bg-sky-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                                <p className="text-xs text-sky-200 relative z-10">
                                     For live price updates, please configure your Finnhub API key.
                                 </p>
                                 <button 
                                     onClick={onSettingsClick}
-                                    className="text-xs font-bold text-neon-blue hover:text-white flex items-center gap-1 relative z-10 transition-colors"
+                                    className="text-xs font-bold text-sky-400 hover:text-white flex items-center gap-1 relative z-10 transition-colors"
                                 >
                                     <Settings size={12} /> Configure in Settings
                                 </button>
@@ -592,7 +600,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                                             value={tickerPrices[ticker] || ''}
                                             placeholder="Price"
                                             onChange={(e) => onUpdatePrice(ticker, parseFloat(e.target.value))}
-                                            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-1.5 pl-6 text-sm text-right text-white focus:border-neon-blue focus:ring-1 focus:ring-neon-blue focus:outline-none transition-all"
+                                            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-1.5 pl-6 text-sm text-right text-white focus:border-sky-400 focus:ring-1 focus:ring-sky-400 focus:outline-none transition-all"
                                          />
                                      </div>
                                  </div>

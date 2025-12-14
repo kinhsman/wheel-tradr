@@ -30,21 +30,30 @@ export const TradeList: React.FC<TradeListProps> = ({ trades, onEdit, onDelete, 
       if (trade.strategy === StrategyType.CSP) return trade.strikePrice * trade.contracts * 100;
       if (trade.strategy === StrategyType.CC) return (trade.underlyingPrice > 0 ? trade.underlyingPrice : trade.strikePrice) * trade.contracts * 100;
       if (trade.strategy === StrategyType.STOCK_BUY) return (trade.underlyingPrice > 0 ? trade.underlyingPrice : trade.strikePrice) * trade.contracts * 100;
+      if (trade.strategy === StrategyType.LONG_STOCK) return trade.strikePrice * trade.contracts; // Cost basis = Buy Price * Shares
       if (trade.strategy === StrategyType.LEAPS) return trade.premium * trade.contracts * 100;
       return 0;
   };
 
   const getNetPremium = (trade: Trade) => {
+      if (trade.strategy === StrategyType.LONG_STOCK) return 0;
       if (trade.premium > 0 && trade.strategy !== StrategyType.LEAPS) return (trade.premium * trade.contracts * 100) - trade.fees;
       return 0;
   };
 
   const getExitValue = (trade: Trade) => {
-      if ((trade.status === TradeStatus.CLOSED || trade.status === TradeStatus.ROLLED) && trade.closePrice !== undefined) return trade.closePrice * trade.contracts * 100;
+      if ((trade.status === TradeStatus.CLOSED || trade.status === TradeStatus.ROLLED) && trade.closePrice !== undefined) {
+         if (trade.strategy === StrategyType.LONG_STOCK) return trade.closePrice * trade.contracts;
+         return trade.closePrice * trade.contracts * 100;
+      }
       return 0;
   };
 
-  const getQuantityDisplay = (trade: Trade) => trade.strategy === StrategyType.STOCK_BUY ? trade.contracts * 100 : trade.contracts;
+  const getQuantityDisplay = (trade: Trade) => {
+      if (trade.strategy === StrategyType.STOCK_BUY) return trade.contracts * 100;
+      if (trade.strategy === StrategyType.LONG_STOCK) return trade.contracts; // Raw shares
+      return trade.contracts;
+  };
 
   const getRor = (trade: Trade) => {
       if (trade.status === TradeStatus.OPEN || trade.pnl === undefined) return null;
@@ -107,7 +116,7 @@ export const TradeList: React.FC<TradeListProps> = ({ trades, onEdit, onDelete, 
       const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
       let matchesStrategy = true;
       if (filterStrategy !== 'all') {
-          if (filterStrategy === 'STOCK') matchesStrategy = t.strategy === StrategyType.STOCK_BUY || t.strategy === StrategyType.STOCK_SELL;
+          if (filterStrategy === 'STOCK') matchesStrategy = t.strategy === StrategyType.STOCK_BUY || t.strategy === StrategyType.STOCK_SELL || t.strategy === StrategyType.LONG_STOCK;
           else matchesStrategy = t.strategy === filterStrategy;
       }
       return matchesTicker && matchesStatus && matchesStrategy;
@@ -138,13 +147,14 @@ export const TradeList: React.FC<TradeListProps> = ({ trades, onEdit, onDelete, 
       case StrategyType.CSP: return <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border bg-purple-500/10 text-neon-purple border-purple-500/20">CSP</span>;
       case StrategyType.CC: return <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border bg-indigo-500/10 text-indigo-300 border-indigo-500/20">CC</span>;
       case StrategyType.STOCK_BUY: return <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border bg-emerald-500/10 text-neon-green border-emerald-500/20">STOCK</span>;
+      case StrategyType.LONG_STOCK: return <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border bg-teal-500/10 text-teal-300 border-teal-500/20">HOLD</span>;
       case StrategyType.LEAPS: return <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border bg-pink-500/10 text-neon-pink border-pink-500/20">LEAPS</span>;
       default: return <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase bg-slate-700 text-slate-300">{strategy}</span>;
     }
   };
 
   const getDTE = (trade: Trade) => {
-      if (trade.strategy === StrategyType.STOCK_BUY || trade.strategy === StrategyType.STOCK_SELL) return { text: '-', color: 'text-slate-500' };
+      if (trade.strategy === StrategyType.STOCK_BUY || trade.strategy === StrategyType.STOCK_SELL || trade.strategy === StrategyType.LONG_STOCK) return { text: '-', color: 'text-slate-500' };
       if (trade.status !== TradeStatus.OPEN) return { text: '-', color: 'text-slate-500' };
       if (!trade.expirationDate) return { text: 'N/A', color: 'text-slate-500' };
 
@@ -163,7 +173,8 @@ export const TradeList: React.FC<TradeListProps> = ({ trades, onEdit, onDelete, 
   const handleInitiateClose = (trade: Trade) => {
     setClosingTrade(trade);
     setClosePriceInput('');
-    const defaultFees = (trade.contracts || 1) * 0.65;
+    // Default fees estimate
+    const defaultFees = trade.strategy === StrategyType.LONG_STOCK ? 0 : (trade.contracts || 1) * 0.65;
     setCloseFeesInput(defaultFees.toFixed(2));
   };
 
@@ -177,7 +188,7 @@ export const TradeList: React.FC<TradeListProps> = ({ trades, onEdit, onDelete, 
     }
   };
 
-  const isLongStrategy = (strategy: StrategyType) => strategy === StrategyType.LEAPS || strategy === StrategyType.STOCK_BUY;
+  const isLongStrategy = (strategy: StrategyType) => strategy === StrategyType.LEAPS || strategy === StrategyType.STOCK_BUY || strategy === StrategyType.LONG_STOCK;
 
   const SortHeader = ({ label, sortKey, align = 'left' }: { label: string, sortKey: SortKey, align?: 'left' | 'center' | 'right' }) => (
       <th 
@@ -222,7 +233,7 @@ export const TradeList: React.FC<TradeListProps> = ({ trades, onEdit, onDelete, 
                       <option value="all">All Strategies</option>
                       <option value={StrategyType.CSP}>CSP</option>
                       <option value={StrategyType.CC}>Covered Call</option>
-                      <option value="STOCK">Stock</option>
+                      <option value="STOCK">Stock (All)</option>
                       <option value={StrategyType.LEAPS}>LEAPS</option>
                   </select>
                   <div className="absolute right-3 top-2.5 pointer-events-none text-slate-500">
@@ -282,7 +293,9 @@ export const TradeList: React.FC<TradeListProps> = ({ trades, onEdit, onDelete, 
                     const ror = getRor(trade);
                     const apy = getApy(trade);
                     const canBTC = trade.status === TradeStatus.OPEN && (trade.strategy === StrategyType.CSP || trade.strategy === StrategyType.CC);
-                    const canSTC = trade.status === TradeStatus.OPEN && trade.strategy === StrategyType.LEAPS;
+                    const canSTC = trade.status === TradeStatus.OPEN && (trade.strategy === StrategyType.LEAPS || trade.strategy === StrategyType.LONG_STOCK || trade.strategy === StrategyType.STOCK_BUY);
+                    
+                    const isLongStock = trade.strategy === StrategyType.LONG_STOCK;
 
                     return (
                     <tr key={trade.id} className="hover:bg-white/5 transition-colors group">
@@ -301,11 +314,14 @@ export const TradeList: React.FC<TradeListProps> = ({ trades, onEdit, onDelete, 
                       <td className={`px-4 py-4 text-center ${dte.color} font-mono text-xs`}>{dte.text}</td>
                       <td className="px-4 py-4 text-slate-400 font-mono text-xs">{trade.closeDate ? new Date(trade.closeDate).toLocaleDateString() : '-'}</td>
                       <td className="px-4 py-4 text-slate-300">
-                        {trade.expirationDate ? new Date(trade.expirationDate).toLocaleDateString(undefined, {month: 'numeric', day: 'numeric'}) : 'N/A'} 
+                        {trade.expirationDate ? new Date(trade.expirationDate).toLocaleDateString(undefined, {month: 'numeric', day: 'numeric'}) : (isLongStock ? 'Hold' : 'N/A')} 
                         <span className="text-slate-400 mx-1">@</span> 
                         {trade.strikePrice > 0 ? trade.strikePrice : '-'}
                       </td>
-                      <td className="px-4 py-4 text-center text-slate-300 font-mono">{getQuantityDisplay(trade)}</td>
+                      <td className="px-4 py-4 text-center text-slate-300 font-mono">
+                        {getQuantityDisplay(trade)}
+                        {isLongStock && <span className="text-[10px] text-slate-500 ml-1">sh</span>}
+                      </td>
                       <td className="px-4 py-4 text-right text-slate-400 font-mono text-xs">{collateral ? `$${collateral.toLocaleString()}` : '-'}</td>
                       <td className="px-4 py-4 text-right text-neon-green/90 font-mono">{netPremium !== 0 ? `$${netPremium.toFixed(2)}` : '-'}</td>
                       <td className="px-4 py-4 text-right text-slate-400 font-mono">{exitValue ? `$${exitValue.toFixed(2)}` : '-'}</td>
@@ -350,10 +366,12 @@ export const TradeList: React.FC<TradeListProps> = ({ trades, onEdit, onDelete, 
                 <form onSubmit={submitQuickClose} className="p-6 space-y-5">
                     <div className="text-sm text-slate-400 mb-2">
                         Closing <span className="font-bold text-white">{closingTrade.ticker}</span> {closingTrade.strategy}
-                        <div className="text-xs mt-1 font-mono opacity-75">Contracts: {closingTrade.contracts} | Strike: ${closingTrade.strikePrice}</div>
+                        <div className="text-xs mt-1 font-mono opacity-75">
+                            Qty: {getQuantityDisplay(closingTrade)} {closingTrade.strategy === StrategyType.LONG_STOCK ? 'Shares' : 'Contracts'}
+                        </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{isLongStrategy(closingTrade.strategy) ? "Credit per Share" : "Debit per Share"}</label>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{isLongStrategy(closingTrade.strategy) ? "Sell Price (per Share)" : "Debit per Share"}</label>
                         <div className="relative">
                             <span className="absolute left-3 top-2.5 text-slate-500"><DollarSign size={14} /></span>
                             <input 
@@ -364,7 +382,7 @@ export const TradeList: React.FC<TradeListProps> = ({ trades, onEdit, onDelete, 
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Fees</label>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Total Fees</label>
                         <div className="relative">
                             <span className="absolute left-3 top-2.5 text-slate-500"><Receipt size={14} /></span>
                             <input 
